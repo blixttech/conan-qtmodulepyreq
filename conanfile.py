@@ -135,6 +135,10 @@ class QtModuleConanBase(object):
 
 class QtModuleConan(ConanFile):
     name = "qtmodulepyreq"
+    description = "Python base class to be used for Qt module building recipes."
+    url = "https://github.com/blixttech/conan-qtmodulepyreq.git"
+    homepage = "https://github.com/blixttech/conan-qtmodulepyreq.git"
+    license = "LGPL-3.0"  # SPDX Identifiers https://spdx.org/licenses/
 
     def set_version(self):
         git = tools.Git(folder=self.recipe_folder)
