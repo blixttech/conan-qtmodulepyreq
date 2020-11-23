@@ -147,5 +147,5 @@ class QtModuleConan(ConanFile):
 
     def set_version(self):
         git = tools.Git(folder=self.recipe_folder)
-        version = re.sub(".*/", "", str(git.get_branch()))
-        self.version = version
+        output = git.run("describe --all").splitlines()[0].strip()
+        self.version = re.sub("^.*/v?|^v?", "", output)
