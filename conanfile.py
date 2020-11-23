@@ -2,9 +2,19 @@ from conans import ConanFile, CMake, tools, VisualStudioBuildEnvironment
 from conans.tools import cpu_count, os_info, SystemPackageTool
 from conans.errors import ConanException
 from distutils.spawn import find_executable
-import os, re, glob, pathlib
+import os
+import re
+import glob
+import pathlib
+
 
 class QtModuleConanBase(object):
+
+    def set_version(self):
+        if not self.version:
+            git = tools.Git(folder=self.recipe_folder)
+            output = git.run("describe --all").splitlines()[0].strip()
+            self.version = re.sub("^.*/v?|^v?", "", output)
 
     def requirements(self):
         self.requires("qt/%s@bincrafters/stable" % self.version)
@@ -21,7 +31,7 @@ class QtModuleConanBase(object):
         source_folder = os.path.join(self.source_folder, self.name)
         build_folder = os.path.join(self.build_folder, ("%s-build" % self.name))
         install_folder = os.path.join(self.build_folder, ("%s-install" % self.name))
-        
+
         if not os.path.exists(build_folder):
             os.mkdir(build_folder)
         if not os.path.exists(install_folder):
@@ -49,14 +59,14 @@ class QtModuleConanBase(object):
                 build_command = "nmake.exe"
             else:
                 build_args.append("-j")
-                build_args.append(str(cpu_count()))            
+                build_args.append(str(cpu_count()))
         else:
             build_command = find_executable("make")
             if not build_command:
                 raise ConanException("Cannot find make")
             else:
                 build_args.append("-j")
-                build_args.append(str(cpu_count()))            
+                build_args.append(str(cpu_count()))
 
         if self.settings.os == "Windows":
             # INSTALL_ROOT environmental variable is placed just after the drive part
@@ -79,9 +89,9 @@ class QtModuleConanBase(object):
             with tools.environment_append(env_build.vars):
                 vcvars_cmd = tools.vcvars_command(self.settings)
                 self.run("%s && %s %s" % (vcvars_cmd, qmake_command, " ".join(qmake_args)),
-                        cwd=build_folder)
+                         cwd=build_folder)
                 self.run("%s && %s %s" % (vcvars_cmd, build_command, " ".join(build_args)),
-                        cwd=build_folder)
+                         cwd=build_folder)
         else:
             self.run("%s %s" % (qmake_command, " ".join(qmake_args)), cwd=build_folder)
             self.run("%s %s" % (build_command, " ".join(build_args)), cwd=build_folder)
@@ -90,8 +100,8 @@ class QtModuleConanBase(object):
         build_folder = os.path.join(self.build_folder, ("%s-build" % self.name))
         install_folder = os.path.join(self.build_folder, ("%s-install" % self.name))
         # Try to find the location where the files are installed.
-        folders = glob.glob(os.path.join(install_folder, "**", ".conan", "**", "mkspecs"), 
-                                        recursive=True)
+        folders = glob.glob(os.path.join(install_folder, "**", ".conan", "**", "mkspecs"),
+                            recursive=True)
         if len(folders) == 0:
             raise ConanException("Cannot find installation directory")
 
@@ -103,19 +113,19 @@ class QtModuleConanBase(object):
         # We use forwarding .pri files instead of using direct .pri files.
         self.copy("*", dst="mkspecs", src=os.path.join(build_folder, "mkspecs"), symlinks=True)
         self.copy("*", dst="plugins", src=os.path.join(install_prefix, "plugins"), symlinks=True)
-        
+
         # qmake loads Qt modules in <Qt SDK Dir>/mkspecs/features/qt_config.prf file.
         # In this file, QMAKEMODULES environmental variable is searched for additional module directories.
         # As we build modules seperately, we have to adjust the correct path dynamically in the
         # forwarding .pri files.
         # So, we use an uniq environmental variable for each module to specify the package path.
-        for filename in glob.iglob(os.path.join(self.package_folder, 
-                                                "mkspecs", "modules", "**", "*.pri"), 
-                                    recursive=True):
-            tools.replace_path_in_file(filename, 
-                                        build_folder, 
-                                        "$$(CONAN_PKG_DIR_" + self.name.upper() + ")", 
-                                        strict=False)
+        for filename in glob.iglob(os.path.join(self.package_folder,
+                                                "mkspecs", "modules", "**", "*.pri"),
+                                   recursive=True):
+            tools.replace_path_in_file(filename,
+                                       build_folder,
+                                       "$$(CONAN_PKG_DIR_" + self.name.upper() + ")",
+                                       strict=False)
 
     def package_info(self):
         if os.path.exists(os.path.join(self.package_folder, "bin")):
@@ -123,7 +133,7 @@ class QtModuleConanBase(object):
         if os.path.exists(os.path.join(self.package_folder, "plugins")):
             self.env_info.QT_PLUGIN_PATH.append(os.path.join(self.package_folder, "plugins"))
 
-        self.env_info.CMAKE_PREFIX_PATH.append(self.package_folder) 
+        self.env_info.CMAKE_PREFIX_PATH.append(self.package_folder)
         self.env_info.QMAKEMODULES.append(os.path.join(self.package_folder, "mkspecs", "modules"))
         self.env_info.__setattr__("CONAN_PKG_DIR_" + self.name.upper(), self.package_folder)
 
