@@ -17,7 +17,7 @@ class QtModuleConanBase(object):
             self.version = re.sub("^.*/v?|^v?", "", output)
 
     def requirements(self):
-        self.requires("qt/%s@bincrafters/stable" % self.version)
+        self.requires("qt/%s" % self.version)
 
     def source(self):
         source_folder = os.path.join(self.source_folder, self.name)
