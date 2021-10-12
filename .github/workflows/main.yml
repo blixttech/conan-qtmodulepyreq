@@ -49,5 +49,7 @@ jobs:
           conan_ref=$(conan info . -n None | sed  -e 's|[\(\)]||g' -e 's|conanfile.py[[:space:]]*||g')
           conan_full_ref="${conan_ref}@${conan_username}/${conan_channel}"
 
+          echo "conan_full_ref: ${conan_full_ref}"
+
           conan export . "${conan_full_ref}"
           conan upload "${conan_full_ref}" -r upload
