@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Update environment
+      - name: Setup environment
         shell: bash
         run: |
           pip3 install --upgrade pip conan
@@ -26,13 +26,11 @@ jobs:
           pip --version
           conan --version
 
-      - name: Configure conan
-        shell: bash
-        run: |
           conan remote add upload "${CONAN_UPLOAD}"
-          conan user 
+          conan user
+ 
           
-      - name: Upload package
+      - name: Export and Upload
         shell: bash
         run: |
           conan_username="${CONAN_USERNAME}"
@@ -46,8 +44,9 @@ jobs:
               conan_channel="${CONAN_CHANNEL}"
           fi
 
-          conan_ref=$(conan info . -n None | sed  -e 's|[\(\)]||g' -e 's|conanfile.py[[:space:]]*||g')
-          conan_full_ref="${conan_ref}@${conan_username}/${conan_channel}"
+          conan_name=$(conan inspect . -a name | sed  -e 's|name:[[:space:]]*||g')
+          conan_version=$(conan inspect . -a version | sed  -e 's|version:[[:space:]]*||g')
+          conan_full_ref="${conan_name}/${conan_version}@${conan_username}/${conan_channel}"
 
           echo "conan_full_ref: ${conan_full_ref}"
 
