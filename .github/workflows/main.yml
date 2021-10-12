@@ -34,8 +34,8 @@ jobs:
         shell: bash
         run: |
           conan_username="${CONAN_USERNAME}"
-          if [ -z "${CONAN_CHANNEL}" ]; then
-              if [ "${CONAN_GIT_REF}" =~ "testing" ]; then
+          if [[ -z "${CONAN_CHANNEL}" ]]; then
+              if [[ "${CONAN_GIT_REF}" =~ "testing" ]]; then
                   conan_channel="testing"
               else
                   conan_channel="stable"
