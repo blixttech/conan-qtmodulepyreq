@@ -29,9 +29,8 @@ jobs:
       - name: Configure conan
         shell: bash
         run: |
-          [[ -z "${CONAN_UPLOAD}" ]] && echo "Empty upload URL"
           conan remote add upload "${CONAN_UPLOAD}"
-          conan user -r upload 
+          conan user 
           
       - name: Upload package
         shell: bash
@@ -49,8 +48,6 @@ jobs:
 
           conan_ref=$(conan info . -n None | sed  -e 's|[\(\)]||g' -e 's|conanfile.py[[:space:]]*||g')
           conan_full_ref="${conan_ref}@${conan_username}/${conan_channel}"
-
-          conan user -r upload
 
           conan export . "${conan_full_ref}"
           conan upload "${conan_full_ref}" -r upload
