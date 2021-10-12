@@ -1,5 +1,5 @@
-from conans import ConanFile, CMake, tools, VisualStudioBuildEnvironment
-from conans.tools import cpu_count, os_info, SystemPackageTool
+from conans import ConanFile, tools, VisualStudioBuildEnvironment
+from conans.tools import cpu_count
 from conans.errors import ConanException
 from distutils.spawn import find_executable
 import os
@@ -10,14 +10,26 @@ import pathlib
 
 class QtModuleConanBase(object):
 
+    module_name = None
+    libs = []
+
     def set_version(self):
         if not self.version:
-            git = tools.Git(folder=self.recipe_folder)
-            output = git.run("describe --all").splitlines()[0].strip()
-            self.version = re.sub("^.*/v?|^v?", "", output)
+            git_ref = os.getenv("CONAN_GIT_REF")
+            if not git_ref or git_ref == "":
+                git = tools.Git(folder=self.recipe_folder)
+                git_ref = git.run("describe --all").splitlines()[0].strip()
+
+            self.version = re.sub("^.*/v?|^v?", "", git_ref)
 
     def requirements(self):
         self.requires("qt/%s" % self.version)
+
+    def configure(self):
+        if self.options.shared:
+            self.options["qt"].shared = True
+        else:
+            self.options["qt"].shared = False
 
     def source(self):
         source_folder = os.path.join(self.source_folder, self.name)
@@ -25,9 +37,6 @@ class QtModuleConanBase(object):
         git.clone(("https://code.qt.io/qt/%s.git" % self.name), "v" + self.version)
 
     def build(self):
-        if self.settings.os == "Windows" and (not self.settings.compiler == "Visual Studio"):
-            raise ConanException("Not yet implemented for this compiler")
-
         source_folder = os.path.join(self.source_folder, self.name)
         build_folder = os.path.join(self.build_folder, ("%s-build" % self.name))
         install_folder = os.path.join(self.build_folder, ("%s-install" % self.name))
@@ -40,7 +49,10 @@ class QtModuleConanBase(object):
         qmake_pro_file = os.path.join(source_folder, ("%s.pro" % self.name))
         qmake_command = os.path.join(self.deps_cpp_info['qt'].rootpath, "bin", "qmake")
         qmake_args = []
-        if not self.options.shared:
+
+        if self.options.shared:
+            qmake_args.append("CONFIG+=shared")
+        else:
             qmake_args.append("CONFIG+=staticlib")
 
         if self.settings.build_type == "Release":
@@ -96,45 +108,93 @@ class QtModuleConanBase(object):
             self.run("%s %s" % (qmake_command, " ".join(qmake_args)), cwd=build_folder)
             self.run("%s %s" % (build_command, " ".join(build_args)), cwd=build_folder)
 
+    def get_lib_suffix(self):
+        if self.settings.build_type == "Debug":
+            if self.settings.os == "Windows":
+                return "d"
+            elif tools.is_apple_os(self.settings.os):
+                return "_debug"
+        return ""
+
     def package(self):
-        build_folder = os.path.join(self.build_folder, ("%s-build" % self.name))
         install_folder = os.path.join(self.build_folder, ("%s-install" % self.name))
         # Try to find the location where the files are installed.
-        folders = glob.glob(os.path.join(install_folder, "**", ".conan", "**", "mkspecs"),
+        folders = glob.glob(os.path.join(install_folder, "**", ".conan", "**", "include"),
                             recursive=True)
         if len(folders) == 0:
             raise ConanException("Cannot find installation directory")
 
         install_prefix = pathlib.Path(folders[0]).parent
+        self.output.info("install_prefix: %s" % install_prefix)
 
-        self.copy("*", dst="bin", src=os.path.join(install_prefix, "bin"), symlinks=True)
-        self.copy("*", dst="include", src=os.path.join(install_prefix, "include"), symlinks=True)
-        self.copy("*", dst="lib", src=os.path.join(install_prefix, "lib"), symlinks=True)
-        # We use forwarding .pri files instead of using direct .pri files.
-        self.copy("*", dst="mkspecs", src=os.path.join(build_folder, "mkspecs"), symlinks=True)
-        self.copy("*", dst="plugins", src=os.path.join(install_prefix, "plugins"), symlinks=True)
+        self.copy("*", src=install_prefix, symlinks=True)
 
-        # qmake loads Qt modules in <Qt SDK Dir>/mkspecs/features/qt_config.prf file.
+        # Remove CMake find/config files in favor of using cmake_find_package_multi
+        # Refer https://github.com/conan-io/conan-center-index/blob/master/docs/faqs.md#why-are-cmake-findconfig-files-and-pkg-config-files-not-packaged
+        for mask in ["Find*.cmake", "*Config.cmake", "*-config.cmake"]:
+            tools.remove_files_by_mask(self.package_folder, mask)
+
+        # Find relative path for include, lib and bin folders
+        folders = glob.glob(os.path.join(self.package_folder, "**", "include"), recursive=True)
+        if len(folders):
+            include_base = os.path.relpath(folders[0], self.package_folder)
+        else:
+            include_base = "include"
+
+        folders = glob.glob(os.path.join(self.package_folder, "**", "lib"), recursive=True)
+        if len(folders):
+            lib_base = os.path.relpath(folders[0], self.package_folder)
+        else:
+            lib_base = "lib"
+
+        folders = glob.glob(os.path.join(self.package_folder, "**", "bin"), recursive=True)
+        if len(folders):
+            bin_base = os.path.relpath(folders[0], self.package_folder)
+        else:
+            bin_base = "bin"
+
+        # qmake loads Qt modules in <QT_INSTALL_ARCHDATA>/mkspecs/features/qt_config.prf file.
         # In this file, QMAKEMODULES environmental variable is searched for additional module directories.
-        # As we build modules seperately, we have to adjust the correct path dynamically in the
-        # forwarding .pri files.
+        # As we build modules seperately, we have to adjust the correct paths in the module's
+        # .pri files.
         # So, we use an uniq environmental variable for each module to specify the package path.
-        for filename in glob.iglob(os.path.join(self.package_folder,
-                                                "mkspecs", "modules", "**", "*.pri"),
-                                   recursive=True):
+        for filename in glob.glob(os.path.join(self.package_folder, "**", "modules", "**", "*.pri"),
+                                  recursive=True):
             tools.replace_path_in_file(filename,
-                                       build_folder,
-                                       "$$(CONAN_PKG_DIR_" + self.name.upper() + ")",
+                                       "$$QT_MODULE_INCLUDE_BASE",
+                                       os.path.join(
+                                           "$$(CONAN_PKG_DIR_" + self.name.upper() + ")",
+                                           include_base),
+                                       strict=False)
+            tools.replace_path_in_file(filename,
+                                       "$$QT_MODULE_LIB_BASE",
+                                       os.path.join(
+                                           "$$(CONAN_PKG_DIR_" + self.name.upper() + ")", lib_base),
+                                       strict=False)
+            tools.replace_path_in_file(filename,
+                                       "$$QT_MODULE_BIN_BASE",
+                                       os.path.join(
+                                           "$$(CONAN_PKG_DIR_" + self.name.upper() + ")", bin_base),
                                        strict=False)
 
     def package_info(self):
-        if os.path.exists(os.path.join(self.package_folder, "bin")):
-            self.env_info.PATH.append(os.path.join(self.package_folder, "bin"))
-        if os.path.exists(os.path.join(self.package_folder, "plugins")):
-            self.env_info.QT_PLUGIN_PATH.append(os.path.join(self.package_folder, "plugins"))
+        self.cpp_info.names["cmake_find_package"] = self.module_name
+        self.cpp_info.names["cmake_find_package_multi"] = self.module_name
+        self.cpp_info.libs = ["%s%s" % (lib, self.get_lib_suffix()) for lib in self.libs]
+        self.cpp_info.defines = ["QT_%s_LIB" % self.module_name.upper()]
 
-        self.env_info.CMAKE_PREFIX_PATH.append(self.package_folder)
-        self.env_info.QMAKEMODULES.append(os.path.join(self.package_folder, "mkspecs", "modules"))
+        for folder in glob.glob(os.path.join(self.package_folder, "**", "include", "*"), recursive=True):
+            self.cpp_info.includedirs.append(folder)
+
+        for folder in glob.glob(os.path.join(self.package_folder, "**", "bin"), recursive=True):
+            self.env_info.PATH.append(folder)
+
+        for folder in glob.glob(os.path.join(self.package_folder, "**", "plugins"), recursive=True):
+            self.env_info.QT_PLUGIN_PATH.append(folder)
+
+        for folder in glob.glob(os.path.join(self.package_folder, "**", "modules"), recursive=True):
+            self.env_info.QMAKEMODULES.append(folder)
+
         self.env_info.__setattr__("CONAN_PKG_DIR_" + self.name.upper(), self.package_folder)
 
 
@@ -146,6 +206,10 @@ class QtModuleConan(ConanFile):
     license = "LGPL-3.0"  # SPDX Identifiers https://spdx.org/licenses/
 
     def set_version(self):
-        git = tools.Git(folder=self.recipe_folder)
-        output = git.run("describe --all").splitlines()[0].strip()
-        self.version = re.sub("^.*/v?|^v?", "", output)
+        if not self.version:
+            git_ref = os.getenv("CONAN_GIT_REF")
+            if not git_ref or git_ref == "":
+                git = tools.Git(folder=self.recipe_folder)
+                git_ref = git.run("describe --all").splitlines()[0].strip()
+
+            self.version = re.sub("^.*/v?|^v?", "", git_ref)

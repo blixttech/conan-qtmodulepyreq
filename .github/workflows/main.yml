@@ -1,0 +1,53 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-20.04
+
+    env:
+        DEBIAN_FRONTEND: "noninteractive"
+        CONAN_USER_HOME: "${{ github.workspace }}/"
+        CONAN_NON_INTERACTIVE: 1
+        CONAN_UPLOAD: "https://gitlab.com/api/v4/projects/22574168/packages/conan"
+        CONAN_USERNAME: "blixt"
+        CONAN_GIT_REF: "${{ github.ref }}"
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Update environment
+        shell: bash
+        run: |
+          pip3 install --upgrade pip conan
+          python --version
+          pip --version
+          conan --version
+
+      - name: Configure conan
+        shell: bash
+        run: |
+          conan remote add upload "${CONAN_UPLOAD}"
+          conan user -r upload 
+          
+      - name: Upload package
+        shell: bash
+        run: |
+          conan_username="${CONAN_USERNAME}"
+          if [ -z "${CONAN_CHANNEL}" ];
+              if [ "${CONAN_GIT_REF}" =~ "testing" ]; then
+                  conan_channel="testing"
+              else
+                  conan_channel="stable"
+              fi
+          else
+              conan_channel="${CONAN_CHANNEL}"
+          fi
+
+          conan_ref=$(conan info . -n None | sed  -e 's|[\(\)]||g' -e 's|conanfile.py[[:space:]]*||g')
+          conan_full_ref="${conan_ref}@${conan_username}/${conan_channel}"
+
+          conan user -r upload
+
+          conan export . "${conan_full_ref}"
+          conan upload "${conan_full_ref}" -r upload
