@@ -5,7 +5,6 @@ on: [push, pull_request]
 jobs:
   export-and-upload:
     runs-on: ubuntu-20.04
-
     env:
         DEBIAN_FRONTEND: "noninteractive"
         CONAN_USER_HOME: "${{ github.workspace }}/"
@@ -27,8 +26,6 @@ jobs:
           conan --version
 
           conan remote add upload "${CONAN_UPLOAD}"
-          conan user
- 
           
       - name: Export and Upload
         shell: bash
@@ -47,8 +44,6 @@ jobs:
           conan_name=$(conan inspect . -a name | sed  -e 's|name:[[:space:]]*||g')
           conan_version=$(conan inspect . -a version | sed  -e 's|version:[[:space:]]*||g')
           conan_full_ref="${conan_name}/${conan_version}@${conan_username}/${conan_channel}"
-
-          echo "conan_full_ref: ${conan_full_ref}"
 
           conan export . "${conan_full_ref}"
           conan upload "${conan_full_ref}" -r upload
