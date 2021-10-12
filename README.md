@@ -15,13 +15,16 @@ class QtSerialPortConan(ConanFile):
     homepage = "https://code.qt.io/cgit/qt/qtserialport.git"
     license = "	LGPL-3.0-only"
 
-    python_requires = "qtmodulepyreq/0.1.0"
+    python_requires = "qtmodulepyreq/0.2.0"
     python_requires_extend = "qtmodulepyreq.QtModuleConanBase"
 
     settings = "os", "arch", "compiler", "build_type"
     options = {"shared": [True, False]}
     default_options = {"shared": True}
+
+    module_name = "Qt5SerialPort"
+    libs = ["Qt5SerialPort"]
 ```
 
-Note that ``QtModuleConanBase`` uses [bincrafters Qt builds](https://bintray.com/beta/#/bincrafters/public-conan/qt:bincrafters) by default. 
+Note that ``QtModuleConanBase`` uses [Qt builds from the central repository](https://conan.io/center/qt) by default. 
 If a different Qt build is used override ``requirements()`` function in the recipe.
