@@ -36,6 +36,11 @@ class QtModuleConanBase(object):
         git = tools.Git(folder=source_folder)
         git.clone(("https://code.qt.io/qt/%s.git" % self.name), "v" + self.version)
 
+    def _fix_vs_build_env(self, build_env):
+        if "_LINK_" in build_env:
+            build_env["_LINK_"] = re.sub("-ENTRY:mainCRTStartup", "", build_env["_LINK_"])
+        return build_env
+
     def build(self):
         source_folder = os.path.join(self.source_folder, self.name)
         build_folder = os.path.join(self.build_folder, ("%s-build" % self.name))
@@ -98,7 +103,8 @@ class QtModuleConanBase(object):
 
         if self.settings.compiler == "Visual Studio":
             env_build = VisualStudioBuildEnvironment(self)
-            with tools.environment_append(env_build.vars):
+            build_env_vars = self._fix_vs_build_env(env_build.vars)
+            with tools.environment_append(build_env_vars):
                 vcvars_cmd = tools.vcvars_command(self.settings)
                 self.run("%s && %s %s" % (vcvars_cmd, qmake_command, " ".join(qmake_args)),
                          cwd=build_folder)
