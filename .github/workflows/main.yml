@@ -46,4 +46,5 @@ jobs:
           conan_full_ref="${conan_name}/${conan_version}@${conan_username}/${conan_channel}"
 
           conan export . "${conan_full_ref}"
+          conan remove "${conan_full_ref}" -r upload
           conan upload "${conan_full_ref}" -r upload
