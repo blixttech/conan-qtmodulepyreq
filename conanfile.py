@@ -140,6 +140,10 @@ class QtModuleConanBase(object):
         for mask in ["Find*.cmake", "*Config.cmake", "*-config.cmake"]:
             tools.remove_files_by_mask(self.package_folder, mask)
 
+        tools.remove_files_by_mask(os.path.join(self.package_folder, "lib"), "*.la*")
+        tools.remove_files_by_mask(os.path.join(self.package_folder, "lib"), "*.pdb*")
+        tools.remove_files_by_mask(os.path.join(self.package_folder, "bin"), "*.pdb")
+
         # Find relative path for include, lib and bin folders
         folders = glob.glob(os.path.join(self.package_folder, "**", "include"), recursive=True)
         if len(folders):
