@@ -10,8 +10,7 @@ import pathlib
 
 class QtModuleConanBase(object):
 
-    module_name = None
-    libs = []
+    module = None
 
     def set_version(self):
         if not self.version:
@@ -188,10 +187,10 @@ class QtModuleConanBase(object):
                                        strict=False)
 
     def package_info(self):
-        self.cpp_info.names["cmake_find_package"] = self.module_name
-        self.cpp_info.names["cmake_find_package_multi"] = self.module_name
-        self.cpp_info.libs = ["%s%s" % (lib, self.get_lib_suffix()) for lib in self.libs]
-        self.cpp_info.defines = ["QT_%s_LIB" % self.module_name.upper()]
+        self.cpp_info.names["cmake_find_package"] = "Qt5%s" % self.module
+        self.cpp_info.names["cmake_find_package_multi"] = "Qt5%s" % self.module
+        self.cpp_info.libs = ["Qt5%s%s" % (self.module, self.get_lib_suffix())]
+        self.cpp_info.defines = ["QT_%s_LIB" % self.module.upper()]
 
         for folder in glob.glob(os.path.join(self.package_folder, "**", "include", "*"), recursive=True):
             self.cpp_info.includedirs.append(folder)
